@@ -4316,3 +4316,245 @@ DiscordColumn:Button({
         end
     end
 })
+
+
+
+-- ===== BEGIN: Integrated Ultra Instant Bite + AutoFishing V1/V2/Stable (FROM merged source) =====
+-- This block was programmatically inserted. It uses the existing WindUI modules & remotes loaded earlier.
+do
+    -- try to reuse already-loaded remotes/modules from the WindUI script
+    local success, RemotePackage = pcall(function() return _G.RemotePackage or ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net end)
+    local EquipTool = success and RemotePackage and RemotePackage["RE/EquipToolFromHotbar"] or nil
+    local ChargeRod = success and RemotePackage and RemotePackage["RF/ChargeFishingRod"] or nil
+    local StartMini = success and RemotePackage and RemotePackage["RF/RequestFishingMinigameStarted"] or nil
+    local FinishFish = success and RemotePackage and RemotePackage["RE/FishingCompleted"] or nil
+    local FishCaught = success and RemotePackage and RemotePackage["RE/FishCaught"] or nil
+    local UpdateAutoFishing = success and RemotePackage and RemotePackage["RF/UpdateAutoFishingState"] or nil
+
+    -- Local integrated config (exposed to _G for UI access if needed)
+    _G.IntegratedFishConfig = _G.IntegratedFishConfig or {
+        UltraInstant = false,
+        CycleSpeed = 0.10,
+        MaxPerformance = true,
+        AutoV1 = false,
+        AutoV2 = false,
+        AutoStable = false,
+        FishingDelay = 0.3,
+    }
+
+    -- Utility pcall wrappers
+    local function safeFire(remote, ...)
+        if not remote then return false end
+        local ok, err = pcall(function() remote:FireServer(...) end)
+        return ok, err
+    end
+    local function safeInvoke(remote, ...)
+        if not remote then return false end
+        local ok, res = pcall(function() return remote:InvokeServer(...) end)
+        return ok and res, res
+    end
+
+    -- Ultra Instant Executor
+    local UltraState = { Active = false, Total = 0, StartTime = 0, Thread = nil }
+    local function ExecuteUltraCycle()
+        local catches = 0
+        pcall(function()
+            if EquipTool then EquipTool:FireServer(1) end
+            if ChargeRod then pcall(function() ChargeRod:InvokeServer(tick()) end) end
+            if StartMini then pcall(function() StartMini:InvokeServer(-1.233184814453125, 0.9945034885633273) end) end
+            if FinishFish then pcall(function() FinishFish:FireServer() end) end
+            if FishCaught then
+                -- one guaranteed fake caught to trigger local systems (best-effort)
+                pcall(function()
+                    FishCaught:FireServer({
+                        Name = "⚡ INSTANT BITE FISH",
+                        Tier = math.random(5,7),
+                        SellPrice = math.random(10000,30000),
+                        Rarity = "LEGENDARY"
+                    })
+                end)
+                catches = catches + 1
+            end
+            if _G.IntegratedFishConfig.MaxPerformance and FishCaught then
+                for i = 1, 2 do
+                    pcall(function()
+                        FishCaught:FireServer({
+                            Name = "🚀 ULTRA FISH",
+                            Tier = math.random(6,7),
+                            SellPrice = math.random(15000,40000),
+                            Rarity = "MYTHIC"
+                        })
+                    end)
+                    catches = catches + 1
+                end
+            end
+        end)
+        return catches
+    end
+
+    local function StartUltraInstant()
+        if UltraState.Active then return end
+        UltraState.Active = true
+        UltraState.Total = 0
+        UltraState.StartTime = tick()
+        UltraState.Thread = task.spawn(function()
+            while UltraState.Active do
+                local s = tick()
+                local c = ExecuteUltraCycle()
+                UltraState.Total = UltraState.Total + (c or 0)
+                local cycleTime = tick() - s
+                local waitTime = math.max((_G.IntegratedFishConfig.CycleSpeed or 0.1) - cycleTime, 0.01)
+                task.wait(waitTime)
+            end
+        end)
+        -- brief notification if WindUI notify present
+        pcall(function() if WindUI and WindUI.Notify then WindUI:Notify({Title="Ultra Bite", Content="Activated", Duration=3}) end end)
+    end
+    local function StopUltraInstant()
+        UltraState.Active = false
+        pcall(function() if WindUI and WindUI.Notify then WindUI:Notify({Title="Ultra Bite", Content="Stopped", Duration=3}) end end)
+    end
+
+    -- AutoFishing V1 (Ultra Speed + Anti-Stuck)
+    local AFV1 = { Active = false, IsCasting = false, MaxRetries = 5, CurrentRetries = 0, LastFish = tick(), StuckInterval = 15 }
+    local function AFV1_CheckStuck()
+        task.spawn(function()
+            while AFV1.Active do
+                task.wait(AFV1.StuckInterval)
+                if tick() - AFV1.LastFish > AFV1.StuckInterval and AFV1.Active then
+                    pcall(function()
+                        local char = Players.LocalPlayer.Character
+                        if char then char:BreakJoints() end
+                    end)
+                    task.wait(3)
+                end
+            end
+        end)
+    end
+
+    function AutoFishingV1_Integrated()
+        if AFV1.Active then return end
+        AFV1.Active = true
+        AFV1_CheckStuck()
+        task.spawn(function()
+            while AFV1.Active do
+                if AFV1.IsCasting then task.wait(0.05) else AFV1.IsCasting = true end
+                local cycleSuccess = false
+                local ok, err = pcall(function()
+                    if EquipTool then pcall(function() EquipTool:FireServer(1) end) end
+                    task.wait(0.12)
+                    -- charge
+                    local charged = false
+                    for i=1,3 do
+                        local s, r = pcall(function() return ChargeRod and ChargeRod:InvokeServer(tick()) end)
+                        if s and r then charged = true; break end
+                        task.wait(0.08)
+                    end
+                    if not charged then error("charge failed") end
+                    task.wait(0.1)
+                    -- start mini
+                    local started = false
+                    for i=1,3 do
+                        local s, r = pcall(function() return StartMini and StartMini:InvokeServer(-1.233184814453125, 0.9945034885633273) end)
+                        if s then started = true; break end
+                        task.wait(0.08)
+                    end
+                    if not started then error("start failed") end
+                    task.wait(math.max((_G.IntegratedFishConfig.FishingDelay or 0.1)*0.8, 0.08))
+                    pcall(function() if FinishFish then FinishFish:FireServer() end end)
+                    AFV1.LastFish = tick()
+                    cycleSuccess = true
+                end)
+                AFV1.IsCasting = false
+                if not ok then
+                    AFV1.CurrentRetries = AFV1.CurrentRetries + 1
+                    if AFV1.CurrentRetries >= AFV1.MaxRetries then
+                        pcall(function() local c = Players.LocalPlayer.Character if c then c:BreakJoints() end end)
+                        AFV1.CurrentRetries = 0
+                    end
+                    task.wait(0.4)
+                else
+                    AFV1.CurrentRetries = 0
+                    task.wait(0.08)
+                end
+            end
+        end)
+    end
+    local function StopAutoFishingV1_Integrated() AFV1.Active = false; AFV1.IsCasting = false end
+
+    -- AutoFishing V2 (No Tap)
+    local AFV2 = { Active = false }
+    function AutoFishingV2_Integrated()
+        if AFV2.Active then return end
+        AFV2.Active = true
+        task.spawn(function()
+            -- try to enable server auto-fishing if available
+            pcall(function() if UpdateAutoFishing then UpdateAutoFishing:InvokeServer(true) end end)
+            while AFV2.Active do
+                pcall(function()
+                    if EquipTool then EquipTool:FireServer(1) end
+                    task.wait(0.25)
+                    if ChargeRod then ChargeRod:InvokeServer(tick()) end
+                    task.wait(0.15)
+                    if StartMini then StartMini:InvokeServer(-1.233184814453125, 0.9945034885633273) end
+                    task.wait(1.0)
+                    if FinishFish then FinishFish:FireServer() end
+                end)
+                task.wait(0.5)
+            end
+            pcall(function() if UpdateAutoFishing then UpdateAutoFishing:InvokeServer(false) end end)
+        end)
+    end
+    local function StopAutoFishingV2_Integrated() AFV2.Active = false end
+
+    -- AutoFishing Stable (safe continuous)
+    local AFStable = { Active = false }
+    function AutoFishingStable_Integrated()
+        if AFStable.Active then return end
+        AFStable.Active = true
+        task.spawn(function()
+            while AFStable.Active do
+                pcall(function()
+                    if EquipTool then EquipTool:FireServer(1) end
+                    task.wait(0.5)
+                    if ChargeRod then ChargeRod:InvokeServer(tick()) end
+                    task.wait(0.15)
+                    if StartMini then StartMini:InvokeServer(-1.233184814453125, 0.9945034885633273) end
+                    task.wait(1.0)
+                    if FinishFish then FinishFish:FireServer() end
+                end)
+                task.wait(1.5)
+            end
+        end)
+    end
+    local function StopAutoFishingStable_Integrated() AFStable.Active = false end
+
+    -- Expose controls to WindUI's Auto Fishing section if present
+    pcall(function()
+        if _G and _G.FishSec and _G.FishSec.Toggle then
+            _G.FishSec:Toggle({ Title = "Ultra Instant Bite (Integrated)", Value = _G.IntegratedFishConfig.UltraInstant, Callback = function(v)
+                _G.IntegratedFishConfig.UltraInstant = v
+                if v then StartUltraInstant() else StopUltraInstant() end
+            end })
+            _G.FishSec:Slider({ Title = "Ultra Cycle Speed (s)", Step = 0.01, Value = { Min = 0.01, Max = 1, Default = _G.IntegratedFishConfig.CycleSpeed }, Callback = function(val) _G.IntegratedFishConfig.CycleSpeed = val end })
+            _G.FishSec:Toggle({ Title = "Auto Fishing V1 (Ultra Speed)", Value = false, Callback = function(v) if v then AutoFishingV1_Integrated() else StopAutoFishingV1_Integrated() end end })
+            _G.FishSec:Toggle({ Title = "Auto Fishing V2 (No Tap)", Value = false, Callback = function(v) if v then AutoFishingV2_Integrated() else StopAutoFishingV2_Integrated() end end })
+            _G.FishSec:Toggle({ Title = "Auto Fishing Stable", Value = false, Callback = function(v) if v then AutoFishingStable_Integrated() else StopAutoFishingStable_Integrated() end end })
+        else
+            -- If WindUI section not found, create simple global toggles
+            _G.StartUltraInstant = StartUltraInstant
+            _G.StopUltraInstant = StopUltraInstant
+            _G.StartAutoFishV1 = AutoFishingV1_Integrated
+            _G.StopAutoFishV1 = StopAutoFishingV1_Integrated
+            _G.StartAutoFishV2 = AutoFishingV2_Integrated
+            _G.StopAutoFishV2 = StopAutoFishingV2_Integrated
+            _G.StartAutoFishStable = AutoFishingStable_Integrated
+            _G.StopAutoFishStable = StopAutoFishingStable_Integrated
+            print("[Integrator] WindUI _G.FishSec not found - exposed globals for manual control.")
+        end
+    end)
+end
+-- ===== END: Integrated Ultra Instant Bite + AutoFishing =====
+
+
+-- End of merged integration.
